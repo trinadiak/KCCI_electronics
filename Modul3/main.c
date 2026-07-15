@@ -77,9 +77,9 @@ static void MX_GPIO_Init(void);
 //	}
 //}
 
-void SysTick_Handler(void) {
-	sys_ticks++;
-}
+//void SysTick_Handler(void) {
+//	sys_ticks++;
+//}
 // There is the same function in another file: stm32f4xx_it.c
 
 // MITIGASI BOUNCING (EKSPERIMEN 7)
@@ -96,6 +96,7 @@ void SysTick_Handler(void) {
 
 // EKSPERIMEN 8: Profiling Komparatif Beban CPU (PollingvsInterupsi)
 void EXTI0_IRQHandler(void) {
+//	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
 	 uint32_t waktu_mulai = DWT->CYCCNT; // Catat waktu saat CPU memasuki ISR
 	 if (EXTI->PR & (1 << 0)) {
 		 EXTI->PR |= (1 << 0);
@@ -138,10 +139,35 @@ int main(void)
   /* Mengaktifkan kapabilitas Trace pada ARM Core */
   CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
   /* Mengatur ulang nilai counter ke nol */
-//  DWT->CYCCNT = 0;
+  DWT->CYCCNT = 0;
   /* Menyalakan pencacah siklus CYCCNT */
-//  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+  RCC->AHB1ENR |= (1 << 0);
+  // Konfigurasi PA0 sebagai Input (Bit 0 dan 1 di MODER diset ke 00)
+  GPIOA->MODER &= ~(3 << (0 * 2));
+  // 1. Mengaktifkan clock AHB1 untuk GPIOC (Bit ke-2)
+  RCC->AHB1ENR |= (1 << 2);
+  // 2. Mengatur Mode PC13 menjadi General Purpose Output
+  // Bersihkan bit 26 dan 27 terlebih dahulu (masking)
+  GPIOC->MODER &= ~(3 << (13 * 2));
+  // Atur bit ke-26 menjadi logika 1 (01 = Output Mode)
+  GPIOC->MODER |= (1 << (13 * 2));
 
+  //-------- EKSPERIMEN 5---------
+  // 1. Aktifkan Clock untuk blok System Configuration (APB2 bit 14)
+  RCC->APB2ENR |= (1 << 14);
+
+  // 2. Hubungkan jalur EXTI0 ke Port A melalui register EXTICR1
+  SYSCFG->EXTICR[0] &= ~(0xF << 0);
+
+  // 3. Batalkan status Masking (aktifkan) jalur interrupt 0
+  EXTI->IMR |= (1 << 0);
+
+  // 4. Konfigurasikan interupsi terjadi saat Rising Edge (tombol ditekan)
+  EXTI->RTSR |= (1 << 0);
+
+  // 5. Daftarkan EXTI0 (IRQ Number 6) ke NVIC milik prosesor ARM
+  NVIC_EnableIRQ(EXTI0_IRQn);
 
   while (1)
   {
@@ -153,13 +179,6 @@ int main(void)
 //	  t_selisih = t_akhir- t_awal;
 
 	  //-------- EKSPERIMEN 2---------
-	  // 1. Mengaktifkan clock AHB1 untuk GPIOC (Bit ke-2)
-//	  RCC->AHB1ENR |= (1 << 2);
-//	  // 2. Mengatur Mode PC13 menjadi General Purpose Output
-//	  // Bersihkan bit 26 dan 27 terlebih dahulu (masking)
-//	  GPIOC->MODER &= ~(3 << (13 * 2));
-//	  // Atur bit ke-26 menjadi logika 1 (01 = Output Mode)
-//	  GPIOC->MODER |= (1 << (13 * 2));
 //
 //	  GPIOC->ODR ^= (1 << 13); // Toggle status pin PC13
 //	  HAL_Delay(500);
@@ -169,32 +188,16 @@ int main(void)
 
 	  //-------- EKSPERIMEN 4---------
 //	   Aktifkan clock AHB1 untuk GPIOA (Bit ke-0)
-	  RCC->AHB1ENR |= (1 << 0);
-	  // Konfigurasi PA0 sebagai Input (Bit 0 dan 1 di MODER diset ke 00)
-	  GPIOA->MODER &= ~(3 << (0 * 2));
 
-	  // Baca status bit ke-0 dari register Input Data (IDR)
-	  if ((GPIOA->IDR & (1 << 0)) !=0){  // Tombol ditekan (Logika 1)
-		  GPIOC->ODR &= ~(1 << 13); // Nyalakan LED PC13 (Active Low)
-	  } else { // Tombol dilepas (Logika 0)
-		  GPIOC->ODR |= (1 << 13); // Padamkan LED PC13
-	  }
+//
+//	  // Baca status bit ke-0 dari register Input Data (IDR)
+//	  if ((GPIOA->IDR & (1 << 0)) !=0){  // Tombol ditekan (Logika 1)
+//		  GPIOC->ODR &= ~(1 << 13); // Nyalakan LED PC13 (Active Low)
+//	  } else { // Tombol dilepas (Logika 0)
+//		  GPIOC->ODR |= (1 << 13); // Padamkan LED PC13
+//	  }
 
-	  //-------- EKSPERIMEN 5---------
-//	  // 1. Aktifkan Clock untuk blok System Configuration (APB2 bit 14)
-//	  RCC->APB2ENR |= (1 << 14);
-//
-//	  // 2. Hubungkan jalur EXTI0 ke Port A melalui register EXTICR1
-//	  SYSCFG->EXTICR[0] &= ~(0xF << 0);
-//
-//	  // 3. Batalkan status Masking (aktifkan) jalur interrupt 0
-//	  EXTI->IMR |= (1 << 0);
-//
-//	  // 4. Konfigurasikan interupsi terjadi saat Rising Edge (tombol ditekan)
-//	  EXTI->RTSR |= (1 << 0);
-//
-//	  // 5. Daftarkan EXTI0 (IRQ Number 6) ke NVIC milik prosesor ARM
-//	  NVIC_EnableIRQ(EXTI0_IRQn);
+
 
 	  //-------- EKSPERIMEN 6--------- //FAILED?
 //	  SysTick->LOAD = (84000- 1);
